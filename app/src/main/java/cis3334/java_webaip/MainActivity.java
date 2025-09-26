@@ -11,7 +11,6 @@ import android.widget.TextView;
 
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
-import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonArrayRequest;
 import com.android.volley.toolbox.JsonObjectRequest;
@@ -71,10 +70,54 @@ public class MainActivity extends AppCompatActivity {
         setupButtonStudentAPI();
     }
 
+    // ===========================
+    // Student-added API (NO KEY)
+    // ===========================
+    // Uses JSONPlaceholder: https://jsonplaceholder.typicode.com/todos/1
+    // Demonstrates:
+    //  - GET request with Volley
+    //  - Parsing a JSON object into a POJO with Moshi
+    //  - Displaying result in a TextView
     private void getStudentAPI() {
-        // ======================= Student must add code here to get JSON data from an API =======================
-        textViewStatus.setText("Not implemented yet ....");
+        final String url = "https://jsonplaceholder.typicode.com/todos/1";
+
+        JsonObjectRequest req = new JsonObjectRequest(
+                Request.Method.GET,
+                url,
+                null,
+                response -> {
+                    try {
+                        Moshi moshi = new Moshi.Builder().build();
+                        JsonAdapter<JsonPlaceholderTodo> adapter =
+                                moshi.adapter(JsonPlaceholderTodo.class);
+
+                        JsonPlaceholderTodo todo = adapter.fromJson(response.toString());
+                        if (todo == null) {
+                            textViewStatus.setText("Parse error: TODO object was null");
+                            return;
+                        }
+
+                        String pretty =
+                                "JSONPlaceholder TODO\n" +
+                                        "userId: " + todo.userId + "\n" +
+                                        "id: " + todo.id + "\n" +
+                                        "title: " + todo.title + "\n" +
+                                        "completed: " + todo.completed + " (" + todo.niceStatus() + ")";
+
+                        textViewStatus.setText(pretty);
+                    } catch (IOException e) {
+                        textViewStatus.setText("Parse exception: " + e.getMessage());
+                    }
+                },
+                error -> textViewStatus.setText(readableVolleyError("Student API", error))
+        );
+
+        mRequestQueue.add(req);
     }
+
+    // --------------------------
+    // Existing sample endpoints
+    // --------------------------
 
     private void getDogFact() {
         String url = "https://dogapi.dog/api/facts";
@@ -101,42 +144,32 @@ public class MainActivity extends AppCompatActivity {
         mRequestQueue.add(jsonObjectRequest);
     }
 
-
-    // Get current weather conditions from OpenWeather (example URL below)
     // https://api.openweathermap.org/data/2.5/weather?q=Duluth&units=imperial&appid=5aa6c40803fbb300fe98c6728bdafce7
     private void getWeather() {
         String url = "https://api.openweathermap.org/data/2.5/weather?q=Duluth&units=imperial&appid=5aa6c40803fbb300fe98c6728bdafce7";
 
         JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(
                 Request.Method.GET, url, null,
-                new Response.Listener<JSONObject>() {
-                    @Override
-                    public void onResponse(JSONObject response) {
-                        Moshi moshi = new Moshi.Builder().build();
-                        JsonAdapter<OpenWeather> adapter = moshi.adapter(OpenWeather.class);
-                        try {
-                            OpenWeather obj = adapter.fromJson(response.toString());
-                            if (obj != null && obj.getTemp() != null) {
-                                textViewStatus.setText("Temperature is " + obj.getTemp().toString());
-                            } else {
-                                textViewStatus.setText("Parse error: OpenWeather/Temp missing");
-                            }
-                        } catch (IOException e) {
-                            textViewStatus.setText("Parse exception: " + e.getMessage());
+                response -> {
+                    Moshi moshi = new Moshi.Builder().build();
+                    JsonAdapter<OpenWeather> adapter = moshi.adapter(OpenWeather.class);
+                    try {
+                        OpenWeather obj = adapter.fromJson(response.toString());
+                        if (obj != null && obj.getTemp() != null) {
+                            textViewStatus.setText("Temperature is " + obj.getTemp().toString());
+                        } else {
+                            textViewStatus.setText("Parse error: OpenWeather/Temp missing");
                         }
+                    } catch (IOException e) {
+                        textViewStatus.setText("Parse exception: " + e.getMessage());
                     }
                 },
-                new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        textViewStatus.setText("ERROR Response: " + error.toString());
-                    }
-                });
+                error -> textViewStatus.setText("ERROR Response: " + error.toString())
+        );
 
         mRequestQueue.add(jsonObjectRequest);
     }
 
-    // Space news articles list
     private void getSpaceNews() {
         String url = "https://api.spaceflightnewsapi.net/v4/articles/?limit=10&offset=0";
 
@@ -144,7 +177,6 @@ public class MainActivity extends AppCompatActivity {
                 Request.Method.GET, url, null,
                 response -> {
                     try {
-                        // v4 returns an object with a "results" array
                         JSONArray results = response.getJSONArray("results");
 
                         textViewStatus.setText("Space News (latest " + results.length() + "):\n");
@@ -153,10 +185,8 @@ public class MainActivity extends AppCompatActivity {
                         JsonAdapter<SpaceNews> adapter = moshi.adapter(SpaceNews.class);
 
                         for (int i = 0; i < results.length(); i++) {
-                            // Parse each article object
                             SpaceNews article = adapter.fromJson(results.getJSONObject(i).toString());
                             if (article != null) {
-                                // Display title + summary (trim if long)
                                 String summary = article.summary == null ? "" : article.summary.trim();
                                 if (summary.length() > 240) summary = summary.substring(0, 240) + "…";
                                 textViewStatus.append(
@@ -175,14 +205,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 },
                 error -> {
-                    // Make Volley errors more informative (status code & body if available)
-                    String msg = "Volley error: " + error.toString();
-                    if (error.networkResponse != null) {
-                        msg += " (HTTP " + error.networkResponse.statusCode + ")";
-                        try {
-                            msg += " " + new String(error.networkResponse.data, "UTF-8");
-                        } catch (Exception ignored) {}
-                    }
+                    String msg = readableVolleyError("SpaceNews", error);
                     textViewStatus.setText(msg);
                     Log.d("CIS 3334", "getSpaceNews error", error);
                 }
@@ -192,7 +215,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupButtonDogFact() {
-        buttonGetFact = findViewById(R.id.buttonGetFact); // reuse same button id
+        buttonGetFact = findViewById(R.id.buttonGetFact);
         buttonGetFact.setOnClickListener(v -> {
             Log.d("CIS 3334", "getDogFact onClick");
             getDogFact();
@@ -201,47 +224,47 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupButtonCurrency() {
         buttonCurrency = findViewById(R.id.buttonCurrency);
-        buttonCurrency.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Log.d("CIS 3334", "getCurrency onClick");
-                // Trigger async fetch; UI will update via LiveData observers
-                viewModelCurrency.fetchRate("USD", "EUR");
-                textViewStatus.setText("Fetching EUR rate for USD…");
-            }
+        buttonCurrency.setOnClickListener(v -> {
+            Log.d("CIS 3334", "getCurrency onClick");
+            // Trigger async fetch; UI updates via LiveData observers
+            viewModelCurrency.fetchRate("USD", "EUR");
+            textViewStatus.setText("Fetching EUR rate for USD…");
         });
     }
 
     private void setupButtonWeather() {
         buttonWeather = findViewById(R.id.buttonWeather);
-        buttonWeather.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Log.d("CIS 3334", "getWeather onClick");
-                getWeather();
-            }
+        buttonWeather.setOnClickListener(v -> {
+            Log.d("CIS 3334", "getWeather onClick");
+            getWeather();
         });
     }
 
     private void setupButtonSpaceNews() {
         buttonSpaceNews = findViewById(R.id.buttonSpaceNews);
-        buttonSpaceNews.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Log.d("CIS 3334", "getSpaceNews onClick");
-                getSpaceNews();
-            }
+        buttonSpaceNews.setOnClickListener(v -> {
+            Log.d("CIS 3334", "getSpaceNews onClick");
+            getSpaceNews();
         });
     }
 
     private void setupButtonStudentAPI() {
         buttonStudentAPI = findViewById(R.id.buttonStudentAPI);
-        buttonStudentAPI.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Log.d("CIS 3334", "getStudentAPI onClick");
-                getStudentAPI();
-            }
+        buttonStudentAPI.setOnClickListener(v -> {
+            Log.d("CIS 3334", "getStudentAPI onClick");
+            getStudentAPI();
         });
+    }
+
+    // Utility: friendlier Volley error messages
+    private String readableVolleyError(String tag, VolleyError error) {
+        String msg = tag + " error: " + error.toString();
+        if (error.networkResponse != null) {
+            msg += " (HTTP " + error.networkResponse.statusCode + ")";
+            try {
+                msg += " " + new String(error.networkResponse.data, "UTF-8");
+            } catch (Exception ignored) {}
+        }
+        return msg;
     }
 }
